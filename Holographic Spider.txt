@@ -1,0 +1,94 @@
+@name Holographic Spider
+@persist [E]:entity [AnimatedHolo Legs]:table [AnimSteps]:number
+@model models/hunter/plates/plate1x1.mdl
+
+#include "inverse_kinematics_v2"
+#include "spider_controller"
+
+if(first() || duped()){
+    E = entity()
+    E:setAlpha(0)
+    AnimSteps = 5 # Number of steps to move a leg
+    
+    Legs = table()
+    AnimatedHolo = table()
+    ToggleLerp = 0
+}
+
+function void createLeg(InitialPos:vector){
+    HOLOCOUNT++
+    holoCreate(HOLOCOUNT, E:pos() + InitialPos, vec(0.5,0.5,0.001), ang(vec(0)), vec(255,0,0), "cylinder")
+    holoAlpha(HOLOCOUNT,0) # Hide it
+    Legs:pushTable(table())
+    Legs[Legs:count(),table]["InitialPos",vector] = InitialPos
+    Legs[Legs:count(),table]["Index",number] = HOLOCOUNT
+    Legs[Legs:count(),table]["ArmIndex",number] = Arms:count() + 1
+    Legs[Legs:count(),table]["OnGround",number] = 1
+    addArm(E,holoEntity(HOLOCOUNT)) 
+    runFABRIK(Arms[Arms:count(),table])
+}
+
+function void holoSetPos(Index:number, Pos:vector){
+    AnimatedHolo[Index,array] = array(holoEntity(Index):pos(),Pos,0)
+}
+
+function void updateHoloPositions(){
+    foreach(Index:number, AnimArr:array=AnimatedHolo){
+        let InitialPos = AnimArr[1,vector]
+        let TargetPos  = AnimArr[2,vector]
+        
+        if (AnimArr[3,number] >= AnimSteps) { AnimatedHolo:unset(Index) continue }
+
+        AnimArr[3,number] = AnimArr[3,number] + 1
+        local Prog = AnimArr[3,number] / AnimSteps 
+        holoPos(Index,InitialPos + vec(0,0,sinr(_PI * Prog) * 10) + (TargetPos - InitialPos) * Prog)
+    }
+}
+
+function number legCanMove(Leg:table){
+    foreach(_:number, Neighbor:number=Leg["Neighbors",array]){
+        if ( !Legs[Neighbor,table]["OnGround",number] | !Leg["OnGround",number] ) { return 0 }
+    }   
+    return 1
+}
+
+if(first()){
+    createLeg(vec(-45,45,0))
+    createLeg(vec(-45,-45,0)) 
+    createLeg(vec(45,-45,0)) 
+    createLeg(vec(45,45,0)) 
+    
+    Legs[1,table]["Neighbors",array] = array(2,4)
+    Legs[2,table]["Neighbors",array] = array(1,3)
+    Legs[3,table]["Neighbors",array] = array(2,4)
+    Legs[4,table]["Neighbors",array] = array(1,3)
+}
+
+timer("Fabrik", 0.05, 0, function () {
+    
+    local EMoved = changed(E:pos())
+    for(I = 1, Legs:count()){
+        let InitialPos = rangerOffset(500, E:toWorld(Legs[I,table]["InitialPos",vector]), -E:up()):position()
+        let Index = Legs[I,table]["Index",number]
+        let CurrentPos = holoPos(Index)
+        ToggleLerp = ( (I == 1) ? 1 : ToggleLerp ) & !isReachable(Arms[I,table])
+           
+        if (ToggleLerp || CurrentPos:distance(InitialPos) >= 50 && legCanMove(Legs[I,table]) ){
+            holoSetPos(Index, InitialPos)
+            holoPos(Index, InitialPos)
+            Legs[I,table]["OnGround",number] = 0 
+            holoColor(Index,vec(255,0,255)) #holoColor(HOLOCOUNT-((Legs:count() - I)*8),vec(255,0,255))
+            
+        }
+        if(!AnimatedHolo:exists(Index)){
+            Legs[I,table]["OnGround",number] = 1 
+            holoColor(Index,vec(255,0,0)) #holoColor(HOLOCOUNT-((Legs:count() - I)*8),vec(255))
+        }
+        
+        if( EMoved || AnimatedHolo[Index,array][3,number] != 0 ) { runFABRIK(Arms[I,table]) }
+    }    
+})
+
+timer("UpdateHoloPos", 0.01, 0, function () {
+    updateHoloPositions()   
+})
