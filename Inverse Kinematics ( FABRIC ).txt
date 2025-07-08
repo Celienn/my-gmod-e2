@@ -1,0 +1,129 @@
+@name Inverse Kinematics v2
+@persist [Arms]:table [HOLOCOUNT JointCount LinkSize MaxIteration Epsilon StrechArmTowardStartPosAngle]:number
+
+
+if(first() || duped()){
+    # Definitions # 
+        
+    HOLOCOUNT = 0
+    Arms = table()
+        
+    ###############
+        
+    # Parameters #
+        
+    JointCount = 3
+    LinkSize = 40
+    MaxIteration = 3
+    Epsilon = 1
+    StrechArmTowardStartPosAngle = 1
+        
+    ##############
+}
+
+function void createLinks(Links:array){
+    for(I = 1, JointCount, 1){
+        HOLOCOUNT++
+        holoCreate(HOLOCOUNT, vec(0), vec(0.1,0.1,LinkSize), ang(vec(0)), vec(255), "cylinder")
+        Links[I,number] = HOLOCOUNT
+    }
+}
+
+function void createJoints(Joints:array){
+    for(I = 1, JointCount + 1, 1){
+        HOLOCOUNT++
+        holoCreate(HOLOCOUNT, vec(0), vec(0.11), ang(vec(0)), vec(115), "sphere3")
+        Joints[I,number] = HOLOCOUNT
+    }
+}
+
+function void addArm(StartPos:entity, EndPos:entity){
+    local Index = Arms:count() + 1
+    Arms[Index,table] = table()
+    
+    local Arm = Arms[Index,table]
+    Arm["Joints",array]    = array()
+    Arm["Links",array]     = array()
+    Arm["StartPos",entity] = StartPos
+    Arm["EndPos",entity]   = EndPos
+    
+    createJoints(Arm["Joints",array])
+    createLinks(Arm["Links",array])
+}
+
+function void resetArmPosition(Arm:table){
+    local Joints   = Arm["Joints",array]
+    local StartPos = Arm["StartPos",entity]:pos()
+    for(I = 1, Joints:count(), 1){
+        holoPos(Joints[I,number], StartPos + vec(0,0,LinkSize*(I-1)))
+    }  
+}
+
+function void strechArmTo(Arm:table,Pos:vector){
+    local Joints   = Arm["Joints",array]
+    local StartPos = Arm["StartPos",entity]:pos()
+    local Direction = ( Pos + (StrechArmTowardStartPosAngle) ? Arm["StartPos",entity]:up() : vec(0,0,75) - StartPos):normalized()
+
+    for(I = 1, Joints:count(), 1){
+        holoPos(Joints[I,number], StartPos + Direction * LinkSize * (I-1))
+    }  
+}
+
+function number isReachable(Arm:table){
+    return (LinkSize * JointCount) > Arm["StartPos",entity]:pos():distance(Arm["EndPos",entity]:pos())
+}
+
+function void drawLinks(Arm:table){
+    local Joints = Arm["Joints",array]
+    local Links  = Arm["Links",array]
+    for(I = 1, Links:count(), 1){
+        local P1 = holoPos(Joints[I,number])
+        local P2 = holoPos(Joints[I+1,number])
+        local MidPoint = (P1 + P2) / 2
+        local Direction = (P2 - P1):normalized()
+        local Angle = Direction:toAngle() + ang(90,0,0)
+        holoPos(Links[I,number], MidPoint)
+        holoScale(Links[I,number], vec(0.1, 0.1, P1:distance(P2) / 12))
+        holoAng(Links[I,number], Angle)
+    }
+}
+
+function void runFABRIK(Arm:table){
+    local StartPos = Arm["StartPos",entity]:pos()
+    local EndPos   = Arm["EndPos",entity]:pos()
+    local Joints   = Arm["Joints",array]
+    local Iteration = 1
+
+    if(isReachable(Arm)) {
+        
+        strechArmTo(Arm,EndPos)
+        
+        while(Iteration < MaxIteration && EndPos:distance(holoPos(Joints[Joints:count(),number])) > Epsilon){
+            Iteration++
+    
+            # Backward Reaching
+            holoPos(Joints[Joints:count(),number],EndPos)
+            for(I = Joints:count() - 1, 1, -1){
+                local Direction = ( holoPos(Joints[I+1,number]) - holoPos(Joints[I,number]) ):normalized()
+                holoPos(Joints[I,number],holoPos(Joints[I+1,number]) - Direction * LinkSize)
+            }
+            
+            # Forward Reaching
+            holoPos(Joints[1,number],StartPos)
+            for(I = 2, Joints:count(), 1){
+                local Direction = ( holoPos(Joints[I,number]) - holoPos(Joints[I-1,number]) ):normalized()
+                holoPos(Joints[I,number],holoPos(Joints[I-1,number]) + Direction * LinkSize)
+            }
+        }  
+    }else {
+        holoPos(Joints[1,number], Arm["StartPos",entity]:pos())  # Re-anchor the base
+        
+        for(I = 2, Joints:count(), 1){
+            local Direction = ( EndPos - holoPos(Joints[I-1,number]) ):normalized()
+            holoPos(Joints[I,number], holoPos(Joints[I-1,number]) + Direction * LinkSize)
+        }
+    }
+    
+    drawLinks(Arm)
+}
+
