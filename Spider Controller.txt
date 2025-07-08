@@ -1,0 +1,55 @@
+@name Spider Controller
+@inputs [Pod Cam]:wirelink
+@persist [Height Speed]:number Normal:vector
+@model models/hunter/plates/plate1x1.mdl
+
+#ifndef propCanCreate()
+    hint("Enable the prop core extension to run this e2",10)
+#else
+    entity():propGravity(0)
+#endif
+
+# Constant but better
+
+Speed = 300
+Height = 50
+Normal = vec(0)
+
+##########
+
+Cam["Activated",number] = 1
+
+const Loop = function() {
+    
+    local E = entity() 
+    
+    W = Pod["W",number]
+    A = Pod["A",number]
+    S = Pod["S",number]
+    D = Pod["D",number]
+    
+    Cam["Position",vector] = E:pos() - E:forward() * 90 + E:up() * 50
+    Cam["Angle",angle] = E:angles()
+    
+    local Ray = rangerOffset(250,E:pos(),-E:up())
+    Normal = Ray:hit() ? Ray:hitNormal() : Normal
+    local DesiredPos = Ray:position() + Normal * Height
+    
+    local Goal = (E:pos() - DesiredPos)
+    local Vel = E:vel()
+    local Move = E:forward() * ( W - S )
+    local Strength = clamp(Goal:length()/1, 1, 1000) ^ 1.5
+    local Force = -Goal:normalized() * Strength - Vel + Move * Speed
+    
+    local Rotation = Normal * ( A - D )
+    Torque = E:up():cross(Normal) + Rotation
+    StrengthAng = clamp( Torque:length() *100 , 1, 100) ^ 1.5
+    
+    # Jsp d'ou vien cette fonction ( surement une fonction custom de meta ) mais sa marche pas avec le torque classique
+    E:applyTorqueCenter(Torque * StrengthAng) 
+    E:applyAngForce( -E:angVel()* 30 )  
+    E:applyForce(Force)
+}
+
+timer("Loop",0.1,0,Loop)
+
