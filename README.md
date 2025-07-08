@@ -20,6 +20,7 @@ todo add a short showcase video
 
 ## How to use 
 It’s a bit tricky to get it working right now. You need to set up a web server that returns data like this. The easiest way is to use Node.js with Express, then make an API call to GitHub.
+( or use soundcloud )
 
 ### Exemple of output
 The URLs needs to be separated by a semicolon .
