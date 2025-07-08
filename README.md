@@ -5,6 +5,8 @@ To use them, you will need to have both **Garry's Mod** and the **Wiremod** addo
 # Holographic Spider
 Using the FABRIK inverse kinematics algorithm, I created a fully controllable holographic spider that can climb any surface.
 
+todo add a short showcase video
+
 ![image](https://github.com/user-attachments/assets/eaa3415b-5db3-4053-979a-ed5caf6fe926)
 
 ### How to use:
@@ -13,6 +15,8 @@ Using the FABRIK inverse kinematics algorithm, I created a fully controllable ho
 
 # Audio Vizualizer
 ![image](https://github.com/user-attachments/assets/fb5c1869-340f-4958-8b16-93402f0b9c8b)
+
+todo add a short showcase video
 
 ## How to use 
 It’s a bit tricky to get it working right now. You need to set up a web server that returns data like this. The easiest way is to use Node.js with Express, then make an API call to GitHub.
