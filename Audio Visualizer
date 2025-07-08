@@ -1,0 +1,349 @@
+@name Music Player
+@persist [E]:entity [Player]:webaudio [HOLO_INDEX Radius Size LastGroupedIndex MinVolume MaxVolume GuiSize]:number [MusicList ExcludeList]:array [Group]:table [LastLooked ServerIp]:string
+
+#ifndef webAudioEnabled()
+    hint("Pls enable webaudio first",10)
+    selfDestruct()
+#endif
+
+if ( first() | duped() ) {
+    E = entity()
+    HOLO_INDEX = 0
+    Size = 1
+    LastGroupedIndex = 0
+    Group = table()
+    LastLooked = ""
+    ExcludeList = array("origin","volume","volume-bar","progress-bar","fft-visualizer-1")
+    MusicList = array()
+    ServerIp = "88.180.109.154"
+    Player = webAudio("https://raw.githubusercontent.com")
+}
+
+##### Configuration #####
+
+MinVolume = 20
+MaxVolume = 300 # Recommended : 200
+GuiSize = 0.1
+Radius = 300    #Default is 200 and (default) max is 1500.
+
+#########################
+
+##### TODO List #####
+
+# Add smooth transition when resizing and moving hologram 
+# Add min and max volume [DONE]
+# Optimise the e2 by only checking for hitbox in the rayBoxIntersect function [DONE](-500ops)
+# A way to add custom music ( not hosted on the server )
+# Being able to create a playlist ( and save it somewhere )
+# Multiple FFT visualizer ( and a button to switch from one to another 
+# Having multilple theme for the gui ?
+# Fix issue : when skipping to the next song and in pause the next song will play ( should replace the pause button by the play one when this happens )
+
+#####################
+
+function webaudio setSound(Index:number) {
+    local Volume = MaxVolume
+    if ( Player:isValid() ) {
+        Volume = Player:getVolume() * 100
+        Player:destroy()   
+    }
+ 
+    Player = webAudio(MusicList[Index,string])
+    Player:setParent(E)
+    Player:setVolume(Volume)
+    Player:setRadius(Radius)
+    Player:update()
+    return Player
+}
+
+function void createHolo(Model:string,Scl:vector,Pos:vector,Ang:angle,Color:vector){
+    
+    holoCreate(HOLO_INDEX,Pos,vec(1),Ang,Color,Model)
+    holoScaleUnits(HOLO_INDEX,Scl)
+    holoDisableShading(HOLO_INDEX,1)
+
+    HOLO_INDEX+=1
+}
+
+function void parentAllto(Index:number) {
+    local ParentPos = holoPos(Index)
+    for( I = 1, HOLO_INDEX){
+        holoPos(I, holoPos(I) + ParentPos)  
+        holoParent(I,Index) 
+    }
+}
+
+function void changeSize(OriginPos:vector, NewSize:number) {
+    local Ratio = NewSize / Size
+    for( I = 1, HOLO_INDEX){
+        holoPos(I, (OriginPos - holoPos(I)) * Ratio + OriginPos)
+        holoScaleUnits(I,holoScaleUnits(I) * Ratio)
+    }  
+}
+
+# Add all the non grouped holo to the given group
+function groupAllHolo(Str:string) {
+    local IList = array()
+    for(I = LastGroupedIndex, HOLO_INDEX-1) {
+        IList:pushNumber(I)
+    }
+    Group[Str,array] = IList
+    LastGroupedIndex = HOLO_INDEX
+}
+
+function void resizeGroup(Str:string,Size:number) {
+    local List = Group[Str,array]
+    local Origin = holoPos(List[1,number])
+    
+    foreach(_:number, I:number = List) { 
+        holoPos(I, (holoPos(I) - Origin) * Size + Origin)
+        holoScaleUnits(I,holoScaleUnits(I) * Size)
+    }
+}
+
+function void recolorGroup(Str:string,Color:vector) {
+    local List = Group[Str,array]
+    
+    foreach(_:number, I:number = List) { 
+        holoColor(I, Color)
+    }
+}
+
+function string getGroupByIndex(Index:number) {
+    foreach(Key:string, List:array = Group) {
+        if (List:indexOf(Index)) { return Key }
+    }
+    return "None Found"
+}
+
+function vector rayBoxIntersect(Index:number) {
+    local HEnt = holoEntity(Index)
+    
+    local RayDir   = owner():eyeAngles():forward()
+    local RayStart = owner():pos() + vec(0,0,64) + RayDir
+    
+    local Start = (RayStart - HEnt:pos()):rotate(-HEnt:angles())
+    local Dir   = RayDir:rotate(-HEnt:angles())
+    
+    local T1 = (-holoScaleUnits(Index)/2 - Start) / Dir
+    local T2 = ( holoScaleUnits(Index)/2 - Start) / Dir
+
+    # Per-axis min/max
+    local TminX = min(T1:x(), T2:x())
+    local TminY = min(T1:y(), T2:y())
+    local TminZ = min(T1:z(), T2:z())
+
+    local TmaxX = max(T1:x(), T2:x())
+    local TmaxY = max(T1:y(), T2:y())
+    local TmaxZ = max(T1:z(), T2:z())
+
+    # Global nearest and farthest
+    local TNear = max(max(TminX, TminY), TminZ)
+    local TFar  = min(min(TmaxX, TmaxY), TmaxZ)
+
+    # No intersection if invalid
+    if (TNear > TFar || TFar < 0) {
+        return vec(0,0,0)
+    }
+
+    local HitLocal = Start + Dir * TNear
+    return HitLocal
+}
+
+function void setProgress(GName:string,Progress:number) {
+    local HitBox = Group[GName,array][1,number]
+    local Cursor = Group[GName,array][2,number]
+    local CursorBar = Group[GName,array][3,number]
+    
+    local Scale = holoScaleUnits(HitBox):z() / 2
+    local SProg = Progress * holoScaleUnits(HitBox):z() 
+    
+    holoPos(Cursor, holoPos(HitBox) + holoEntity(HitBox):up() * (Scale - SProg))
+    holoPos(CursorBar, holoPos(HitBox) + holoEntity(HitBox):up() * (Scale - SProg/2))
+    holoScaleUnits(CursorBar, vec(0,0,SProg-holoScaleUnits(CursorBar):z()) + holoScaleUnits(CursorBar) )
+}
+
+function number handleBar(GName:string) {
+    local HitBox = Group[GName,array][1,number]
+    local HitPos = rayBoxIntersect(HitBox)
+    local Scale = holoScaleUnits(HitBox):z() / 2
+    local Diff = (HitPos - Scale * holoEntity(HitBox):forward())
+    local Progress = 1 - ( Diff:z() / holoScaleUnits(HitBox):z() )
+    
+    setProgress(GName,Progress)
+
+    return Progress
+}
+
+
+function void createHud() {
+    
+    # Hud Origin
+    local OriginIndex = HOLO_INDEX
+    createHolo("",vec(0.01),E:pos(),ang(0,0,0),vec(255,0,0)) 
+    holoParent(OriginIndex,E)
+    holoAlpha(OriginIndex,0)
+    groupAllHolo("origin")
+    
+    # Play button
+    createHolo("pyramid",vec(10,1,10),vec(0),ang(-90,0,0),vec(255))
+    groupAllHolo("play")
+    
+    # Pause button
+    createHolo("",vec(10,1,8),vec(0,0,0),ang(-90,0,0),vec(255)) # hitbox
+    holoAlpha(HOLO_INDEX-1,0)
+    createHolo("",vec(10,1,2),vec(3,0,0),ang(-90,0,0),vec(255))
+    createHolo("",vec(10,1,2),vec(-3,0,0),ang(-90,0,0),vec(255))
+    groupAllHolo("pause")
+    resizeGroup("pause",0.01)
+    
+    # Next button 
+    createHolo("pyramid",vec(10,1,10),vec(20,0,0),ang(-90,0,0),vec(255)) 
+    createHolo("",vec(10,1,1),vec(25,0,0),ang(-90,0,0),vec(255)) 
+    groupAllHolo("next")
+    
+    # Prev button 
+    createHolo("pyramid",vec(10,1,10),vec(-20,0,0),ang(90,0,0),vec(255)) 
+    createHolo("",vec(10,1,1),vec(-25,0,0),ang(-90,0,0),vec(255)) 
+    groupAllHolo("previous")
+    
+    # Volume button 
+    createHolo("pyramid",vec(8,1,8),vec(-74,0,0),ang(90,0,0),vec(255))
+    createHolo("",vec(4,1,4),vec(-76,0,0),ang(90,0,0),vec(255))
+    createHolo("hq_hdome_thin",vec(5,1,5),vec(-69,0,0),ang(-90,0,0),vec(255))
+    createHolo("hq_torus_thin",vec(8,8,8),vec(-69,0,0),ang(0,0,90),vec(255))
+    holoClipEnabled(HOLO_INDEX-1,1)
+    holoClip(HOLO_INDEX-1,vec(0,0,0),vec(-1,0,0),0)
+    groupAllHolo("volume")
+    
+    # Volume bar
+    createHolo("",vec(4,0.1,25),vec(-47.5,0,0),ang(90,0,0),vec(255)) # hitbox ( have to be first )
+    holoAlpha(HOLO_INDEX-1,0)
+    createHolo("hq_sphere",vec(4,1,4),vec(-35,0,0),ang(0,0,0),vec(255)) # cursor ( have to be second )
+    createHolo("",vec(2,0.5,25),vec(-47.5,0,0),ang(90,0,0),vec(255)) # cursor-bar ( have to be third )
+    createHolo("",vec(2,0.1,25),vec(-47.5,0,0),ang(90,0,0),vec(120))
+    holoAlpha(HOLO_INDEX-1,75)
+    groupAllHolo("volume-bar")
+    
+    # Progress bar
+    createHolo("",vec(4,0.1,175),vec(0,0,-20),ang(90,0,0),vec(255)) # hitbox ( have to be first )
+    holoAlpha(HOLO_INDEX-1,0)
+    createHolo("hq_sphere",vec(4,1,4),vec(-175/2,0,-20),ang(0,0,0),vec(255)) # cursor ( have to be second )
+    createHolo("",vec(2,0.5,0.1),vec(-175/2,0,-20),ang(90,0,0),vec(255)) # cursor-bar ( have to be third )
+    createHolo("",vec(2,0.1,175),vec(0,0,-20),ang(90,0,0),vec(120))
+    holoAlpha(HOLO_INDEX-1,75)
+    groupAllHolo("progress-bar")
+    
+    # FFT visualizer
+    createHolo("",vec(4,0.1,1),vec(0,0,-30),ang(90,0,0),vec(255)) # origin ( have to be first )
+    holoAlpha(HOLO_INDEX-1,0)
+    for(I = 0, 64) {
+        local Dir = I % 2 ? 1 : -1
+        createHolo("",vec(4,0.1,1),vec(Dir * round(I / 2) * 3,0,-30),ang(90,0,0),vec(255))
+    }
+    groupAllHolo("fft-visualizer-1")
+    
+    parentAllto(OriginIndex)
+    changeSize(holoPos(OriginIndex),GuiSize) # no idea why but removing this break the whole gui
+    holoPos(OriginIndex,E:pos() + vec(0,0,15))
+}
+
+createHud()
+
+# Init music list
+httpRequest("http://" + ServerIp + "/music")
+timer("CheckResponse",1,1,function() {
+    MusicList = httpData():explode(";")
+    setSound(1)
+})
+
+timer("UpdateProgressBar",0.2,0,function() {
+    local Progress = Player:getTime() / Player:getLength() 
+    setProgress("progress-bar",Progress > 1 ? 1 : Progress)
+})
+
+timer("HoloHitBox",0.1,0,function () {
+    
+    foreach(GName:string, List:array = Group) {
+        local Index = List[1,number]
+
+        if (rayBoxIntersect(Index)) {
+
+            if (GName == LastLooked) { continue }
+            if ( !ExcludeList:indexOf(GName) ) { resizeGroup(GName, 1.25)  }
+            if ( !ExcludeList:indexOf(LastLooked) ) { resizeGroup(LastLooked, 1 / 1.25)  }
+            
+            # Play sfx ?
+            LastLooked = GName
+        }
+    }
+})
+
+timer("Update-FFTvisualizer",0.1,0,function () {
+    # TODO holy fuck optimise this, and while i'm at it change the way the hitbox data is stored
+    local FFT = Group["fft-visualizer-1",array]
+    local Scale = holoScaleUnits(FFT[1,number])
+    local Z = holoPos(FFT[1,number]):z()
+    local FFT_Data = Player:getFFT()
+    foreach(Index:number, Value:number=FFT_Data) {
+        local I = FFT[Index,number] + 1
+        holoScaleUnits(I,Scale + vec(Value*Size*0.0125*2,0,0))
+        local Origin = holoPos(I)
+        holoPos(I, vec(Origin:x(),Origin:y(),Z + Value*Size*0.0125))
+    }
+})
+
+event keyPressed(Ply:entity, Key:string, Down:number, Bind:string) {
+    if (Ply == owner() & Key == "e" & Down) {
+        
+        switch (LastLooked) {
+            case "volume-bar",
+            
+                local Progress = handleBar("volume-bar")
+                Player:setVolume( MinVolume + Progress * (MaxVolume - MinVolume) )
+                Player:update()
+                
+                break
+                
+            case "progress-bar",
+                local Progress = handleBar("progress-bar")
+                
+                Player:setTime( round(Progress * Player:getLength()) )
+                Player:update()
+                
+                break
+                
+            case "play",
+                resizeGroup("play",0.01 * 0.7)
+                resizeGroup("pause",100 * 1.3)
+                LastLooked = "pause"
+                Player:play()
+                break
+                
+            case "pause",
+                resizeGroup("play",100 * 1.3)
+                resizeGroup("pause",0.01 * 0.7)
+                LastLooked = "play"
+                Player:pause()
+                break
+                
+            case "next",
+                local Index = MusicList:indexOf(Player:getFileName())
+                setSound( (Index + 1) > MusicList:count() ? 1 : Index + 1 )
+                Player:play()
+                break
+                
+            case "previous",
+                local Index = MusicList:indexOf(Player:getFileName())
+                setSound( (Index - 1) ? (Index - 1) : MusicList:count() - 1 )
+                Player:play()
+                break
+                
+        }
+    }
+    
+    if (Ply == owner() & Key == "z" & Down) {
+        # Todo show gui in front of the owner ( toggle )
+    }
+}
+
