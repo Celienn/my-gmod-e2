@@ -5,7 +5,7 @@ To use them, you will need to have both **Garry's Mod** and the **Wiremod** addo
 # Holographic Spider
 Using the FABRIK inverse kinematics algorithm, I created a fully controllable holographic spider that can climb any surface.
 
-todo add a short showcase video
+[showcase video](https://www.youtube.com/watch?v=7AMGz1WlnKM) (look a bit funky due multiplayer's latency)
 
 ![image](https://github.com/user-attachments/assets/eaa3415b-5db3-4053-979a-ed5caf6fe926)
 
@@ -18,11 +18,10 @@ todo add a short showcase video
 
 todo add a short showcase video
 
-## How to use 
-It’s a bit tricky to get it working right now. You need to set up a web server that returns data like this. The easiest way is to use Node.js with Express, then make an API call to GitHub.
-( or use soundcloud )
+### How to use 
+It’s a bit tricky to get it working right now. You need to set up a web server that returns data like bellow. The easiest way is to use Node.js with Express, then make an API call to GitHub. Alternatively you can use any hosting services that is [whitelisted](https://github.com/thevurv/WebAudio/blob/main/WHITELIST.md).
 
-### Exemple of output
+#### Exemple of output
 The URLs needs to be separated by a semicolon .
 ```
 https://raw.githubusercontent.com/Celienn/my-gmod-e2/main/music/outer-wilds-main-title.mp3;https://raw.githubusercontent.com/Celienn/my-gmod-e2/main/music/outerwilds-travelers.mp3
